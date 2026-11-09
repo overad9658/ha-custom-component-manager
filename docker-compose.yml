@@ -1,0 +1,109 @@
+services:
+  github-mock:
+    image: ha-ccm-dev:${PYTHON_VERSION:-3.12}
+    build:
+      context: .
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    command: ["python3", "-m", "docker.mock_github_server"]
+    environment:
+      MOCK_GITHUB_HOST: 0.0.0.0
+      MOCK_GITHUB_PORT: 8000
+      MOCK_SERVER_QUIET: "1"
+    ports:
+      - "${MOCK_GITHUB_PORT:-8000}:8000"
+    volumes:
+      - .:/workspace
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 1s
+
+  ha-instance:
+    image: ha-ccm-dev:${PYTHON_VERSION:-3.12}
+    build:
+      context: .
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    command: ["/workspace/docker/ha_instance_entrypoint.sh"]
+    environment:
+      MOCK_HA_HOST: 0.0.0.0
+      MOCK_HA_PORT: 8123
+      HA_API_KEY: ${HA_API_KEY:-test-ha-api-token}
+      HA_SSH_PASSWORD: ${HA_SSH_PASSWORD:-ha_test_pass}
+      HA_SSH_PASSPHRASE: ${HA_SSH_PASSPHRASE:-test-key-passphrase}
+      HA_SSH_KEY_DIR: /ssh-keys
+      HA_CONFIG_DIR: /config
+      MOCK_SERVER_QUIET: "1"
+    ports:
+      - "${HA_HTTP_PORT:-8123}:8123"
+      - "${HA_SSH_PORT:-2222}:22"
+    volumes:
+      - .:/workspace
+      - ha-config:/config
+      - ssh-keys:/ssh-keys
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8123/api/ && test -f /ssh-keys/id_ed25519"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+
+  test:
+    image: ha-ccm-dev:${PYTHON_VERSION:-3.12}
+    build:
+      context: .
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    depends_on:
+      github-mock:
+        condition: service_healthy
+      ha-instance:
+        condition: service_healthy
+    environment:
+      HA_CCM_DOCKER_TEST: "1"
+      HA_CCM_TEST_GITHUB_API_BASE: http://github-mock:8000
+      HA_CCM_TEST_GITHUB_CODELOAD_BASE: http://github-mock:8000/codeload
+      HA_CCM_TEST_HA_URL: http://ha-instance:8123
+      HA_CCM_TEST_HA_API_KEY: ${HA_API_KEY:-test-ha-api-token}
+      HA_CCM_TEST_SSH_HOST: ha-instance
+      HA_CCM_TEST_SSH_PORT: "22"
+      HA_CCM_TEST_SSH_USER: root
+      HA_CCM_TEST_SSH_PASSWORD: ${HA_SSH_PASSWORD:-ha_test_pass}
+      HA_CCM_TEST_SSH_PASSPHRASE: ${HA_SSH_PASSPHRASE:-test-key-passphrase}
+      HA_CCM_TEST_SSH_KEY_DIR: /ssh-keys
+    volumes:
+      - .:/workspace
+      - ssh-keys:/ssh-keys:ro
+    command: ["pytest", "-v"]
+
+  ha-ccm:
+    image: ha-ccm-dev:${PYTHON_VERSION:-3.12}
+    build:
+      context: .
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.12}
+    profiles:
+      - cli
+    depends_on:
+      github-mock:
+        condition: service_healthy
+      ha-instance:
+        condition: service_healthy
+    environment:
+      HA_CCM_GITHUB_API_BASE: ${HA_CCM_GITHUB_API_BASE:-http://github-mock:8000}
+      HA_CCM_GITHUB_CODELOAD_BASE: ${HA_CCM_GITHUB_CODELOAD_BASE:-http://github-mock:8000/codeload}
+      HA_API_KEY: ${HA_API_KEY:-test-ha-api-token}
+      HA_SSH_PASSWORD: ${HA_SSH_PASSWORD:-ha_test_pass}
+      HA_SSH_PASSPHRASE: ${HA_SSH_PASSPHRASE:-test-key-passphrase}
+    volumes:
+      - .:/workspace
+      - ssh-keys:/ssh-keys:ro
+    entrypoint: ["ha-ccm"]
+    command: ["--help"]
+
+volumes:
+  ha-config:
+  ssh-keys:

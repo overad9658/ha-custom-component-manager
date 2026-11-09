@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import shutil
 import tarfile
 import zipfile
@@ -31,9 +32,21 @@ class GitHubClient:
         token: Optional[str] = None,
         session: Optional[requests.Session] = None,
         timeout: int = 30,
+        api_base: Optional[str] = None,
+        codeload_base: Optional[str] = None,
     ) -> None:
         self.token = token
         self.timeout = timeout
+        self.api_base = (
+            api_base
+            or os.environ.get("HA_CCM_GITHUB_API_BASE")
+            or self.API_BASE
+        ).rstrip("/")
+        self.codeload_base = (
+            codeload_base
+            or os.environ.get("HA_CCM_GITHUB_CODELOAD_BASE")
+            or self.CODELOAD_BASE
+        ).rstrip("/")
         self.session = session or requests.Session()
         self.session.headers.update(
             {
@@ -51,7 +64,7 @@ class GitHubClient:
         return self._resolve_release(component.repo, component.ref)
 
     def _resolve_branch(self, repo: str, branch: str) -> ResolvedRef:
-        url = f"{self.API_BASE}/repos/{repo}/commits/{branch}"
+        url = f"{self.api_base}/repos/{repo}/commits/{branch}"
         resp = self.session.get(url, timeout=self.timeout)
         if resp.status_code == 200:
             data = resp.json()
@@ -63,7 +76,7 @@ class GitHubClient:
                     ref_type=RefType.BRANCH,
                     requested_ref=branch,
                     resolved_ref=sha,
-                    archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/{sha}",
+                    archive_url=f"{self.codeload_base}/{repo}/tar.gz/{sha}",
                     version_label=f"{branch}@{short_sha}",
                 )
         elif resp.status_code == 404:
@@ -77,7 +90,7 @@ class GitHubClient:
                 ref_type=RefType.BRANCH,
                 requested_ref=branch,
                 resolved_ref=f"branch:{branch}",
-                archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/heads/{branch}",
+                archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/heads/{branch}",
                 version_label=branch,
             )
 
@@ -88,7 +101,7 @@ class GitHubClient:
 
     def _resolve_release(self, repo: str, ref: str) -> ResolvedRef:
         if ref.lower() == "latest":
-            url = f"{self.API_BASE}/repos/{repo}/releases/latest"
+            url = f"{self.api_base}/repos/{repo}/releases/latest"
             resp = self.session.get(url, timeout=self.timeout)
             if resp.status_code == 200:
                 data = resp.json()
@@ -98,13 +111,13 @@ class GitHubClient:
                     ref_type=RefType.RELEASE,
                     requested_ref=ref,
                     resolved_ref=tag_name,
-                    archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/tags/{tag_name}",
+                    archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/tags/{tag_name}",
                     version_label=tag_name,
                 )
             if resp.status_code == 404:
                 # Fallback to most recent tag if repo uses tags instead of formal GitHub Releases
                 tags_resp = self.session.get(
-                    f"{self.API_BASE}/repos/{repo}/tags",
+                    f"{self.api_base}/repos/{repo}/tags",
                     params={"per_page": 1},
                     timeout=self.timeout,
                 )
@@ -115,7 +128,7 @@ class GitHubClient:
                         ref_type=RefType.RELEASE,
                         requested_ref=ref,
                         resolved_ref=tag_name,
-                        archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/tags/{tag_name}",
+                        archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/tags/{tag_name}",
                         version_label=tag_name,
                     )
                 raise GitHubError(f"No releases or tags found for repository '{repo}'.")
@@ -131,7 +144,7 @@ class GitHubClient:
             candidates.append(f"v{ref}")
 
         for candidate in candidates:
-            rel_url = f"{self.API_BASE}/repos/{repo}/releases/tags/{candidate}"
+            rel_url = f"{self.api_base}/repos/{repo}/releases/tags/{candidate}"
             resp = self.session.get(rel_url, timeout=self.timeout)
             if resp.status_code == 200:
                 data = resp.json()
@@ -141,12 +154,12 @@ class GitHubClient:
                     ref_type=RefType.RELEASE,
                     requested_ref=ref,
                     resolved_ref=tag_name,
-                    archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/tags/{tag_name}",
+                    archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/tags/{tag_name}",
                     version_label=tag_name,
                 )
 
             # Check if tag exists directly even if no GitHub Release object was created
-            tag_url = f"{self.API_BASE}/repos/{repo}/git/ref/tags/{candidate}"
+            tag_url = f"{self.api_base}/repos/{repo}/git/ref/tags/{candidate}"
             tag_resp = self.session.get(tag_url, timeout=self.timeout)
             if tag_resp.status_code == 200:
                 return ResolvedRef(
@@ -154,7 +167,7 @@ class GitHubClient:
                     ref_type=RefType.RELEASE,
                     requested_ref=ref,
                     resolved_ref=candidate,
-                    archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/tags/{candidate}",
+                    archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/tags/{candidate}",
                     version_label=candidate,
                 )
 
@@ -164,7 +177,7 @@ class GitHubClient:
                     ref_type=RefType.RELEASE,
                     requested_ref=ref,
                     resolved_ref=ref,
-                    archive_url=f"{self.CODELOAD_BASE}/{repo}/tar.gz/refs/tags/{ref}",
+                    archive_url=f"{self.codeload_base}/{repo}/tar.gz/refs/tags/{ref}",
                     version_label=ref,
                 )
 

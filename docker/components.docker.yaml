@@ -1,0 +1,29 @@
+# Docker Compose Local Development Configuration for ha-ccm
+# Used with: docker compose run --rm ha-ccm sync
+
+homeassistant:
+  mode: ssh
+  custom_components_dir: /config/custom_components
+  url: http://ha-instance:8123
+  api_key: "${HA_API_KEY:-test-ha-api-token}"
+
+  ssh:
+    host: ha-instance
+    port: 22
+    username: root
+    key_file: /ssh-keys/id_ed25519
+    password: "${HA_SSH_PASSWORD:-ha_test_pass}"
+    strict_host_key_checking: false
+
+prune: true
+backup_enabled: true
+backup_dir: /workspace/backups
+
+components:
+  - name: Philips Hue Play HDMI Sync Box
+    repo: mvdwetering/huesyncbox
+    branch: dev
+
+  - name: HACS
+    repo: hacs/integration
+    version: latest
