@@ -136,7 +136,43 @@ ha-ccm restart -c components.yaml --api-key "YOUR_LONG_LIVED_TOKEN"
 
 ---
 
-## Running Tests
+## Local Development & Testing with Docker Compose
+
+A self-contained Docker Compose environment ([`docker-compose.yml`](docker-compose.yml)) is included for local development and end-to-end testing (also executed in GitHub Actions):
+
+- **`ha-instance`**: Runs a real OpenSSH/SFTP server (`/config/custom_components`) with both password and SSH key authentication (unencrypted + passphrase-encrypted) alongside a mock Home Assistant REST API (`http://ha-instance:8123`).
+- **`github-mock`**: Serves a mock GitHub REST API and Codeload tarball archive server (`http://github-mock:8000`) for deterministic, offline testing of branch commits, release tags, updates, backups, reverts, and pruning.
+- **`test`**: Mounts your local workspace (`.:/workspace`) so code edits can be tested immediately without rebuilding.
+- **`ha-ccm`**: Interactive CLI service pre-configured to talk to `ha-instance` and `github-mock` via [`docker/components.docker.yaml`](docker/components.docker.yaml).
+
+### Run the Full Test Suite (Unit + Docker SSH/API Integration Tests)
+
+```bash
+# Build and run all unit and Docker integration tests
+docker compose run --rm --build test
+
+# After editing files in src/ or tests/, re-run immediately without rebuilding
+docker compose run --rm test
+
+# Stop and clean up containers and volumes
+docker compose down -v
+```
+
+### Interactive CLI Testing in Docker Compose
+
+```bash
+# Sync components to the containerized Home Assistant SSH target
+docker compose run --rm ha-ccm sync -c docker/components.docker.yaml
+
+# Check component status against the mock GitHub server
+docker compose run --rm ha-ccm status -c docker/components.docker.yaml
+
+# List backups and revert a component over SSH
+docker compose run --rm ha-ccm backups -c docker/components.docker.yaml
+docker compose run --rm ha-ccm revert huesyncbox -c docker/components.docker.yaml
+```
+
+### Running Unit Tests Directly in a Local Virtualenv
 
 ```bash
 .venv/bin/pytest -v
