@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ha-ccm-lock.json
+backups/
+components.yaml
+components.local.yaml
+custom_components/
+.env
+.DS_Store

@@ -1,0 +1,41 @@
+# Home Assistant Custom Component Manager (ha-ccm) Configuration
+
+homeassistant:
+  # Deployment mode: "local" or "ssh"
+  mode: local
+
+  # Path to the Home Assistant custom_components directory
+  # Local example: ./custom_components or /config/custom_components
+  custom_components_dir: ./custom_components
+
+  # Home Assistant URL and optional Long-Lived Access Token for automatic restart
+  # If api_key is omitted or empty, ha-ccm will notify you to manually restart Home Assistant.
+  url: http://homeassistant.local:8123
+  api_key: "${HA_API_KEY:-}"
+
+  # Uncomment to deploy remotely over SSH/SFTP (and set mode: ssh above):
+  ssh:
+    host: homeassistant.local
+    port: 22
+    username: root
+    key_file: ~/.ssh/id_ed25519
+    # password: "${HA_SSH_PASSWORD}"
+    strict_host_key_checking: false
+
+# Optional: remove previously managed custom components that are removed from this list
+prune: false
+
+# Optional: GitHub Personal Access Token for higher API rate limits
+github_token: "${GITHUB_TOKEN:-}"
+
+# List of custom components to manage from GitHub
+components:
+  # Example using a named branch ("dev", "main", "release", etc.)
+  - name: Philips Hue Play HDMI Sync Box
+    repo: mvdwetering/huesyncbox
+    branch: dev
+
+  # You can also pass a full GitHub URL or specify a versioned release ("latest" or a tag like "v1.45.0"):
+  # - name: HACS
+  #   repo: https://github.com/hacs/integration
+  #   version: latest
